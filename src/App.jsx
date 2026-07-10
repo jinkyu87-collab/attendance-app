@@ -1408,6 +1408,21 @@ function AdminDashboard({ storeId, storeName, employees, setEmployees, onBack })
   const [stockDate, setStockDate] = useState(todayStr());
   const [stockEntries, setStockEntries] = useState([]);
 
+  const [salesFormOpen, setSalesFormOpen] = useState(false);
+  const [newSalesEmpId, setNewSalesEmpId] = useState("");
+  const [newSalesAmount, setNewSalesAmount] = useState("");
+  const [newSalesCash, setNewSalesCash] = useState("");
+  const [newSalesCard, setNewSalesCard] = useState("");
+  const [newSalesMemo, setNewSalesMemo] = useState("");
+
+  const [stockFormOpen, setStockFormOpen] = useState(false);
+  const [newStockEmpId, setNewStockEmpId] = useState("");
+  const [newStockProductName, setNewStockProductName] = useState("");
+  const [newStockQty, setNewStockQty] = useState("");
+  const [newStockUnit, setNewStockUnit] = useState("개");
+  const [newStockSupplier, setNewStockSupplier] = useState("");
+  const [newStockMemo, setNewStockMemo] = useState("");
+
   const [events, setEvents] = useState([]);
   const [evTitle, setEvTitle] = useState("");
   const [evDate, setEvDate] = useState(todayStr());
@@ -1578,6 +1593,59 @@ function AdminDashboard({ storeId, storeName, employees, setEmployees, onBack })
     const list = events.filter((e) => e.id !== id);
     setEvents(list);
     await sSet(KEY.events(storeId), list);
+  };
+
+  const addSalesEntry = async () => {
+    const amt = Number(newSalesAmount);
+    const emp = employees.find((e) => e.id === newSalesEmpId);
+    if (!emp || !amt || amt <= 0) return;
+    const list = await sGet(KEY.sales(storeId, salesDate), []);
+    list.push({
+      id: "s" + Date.now() + Math.random().toString(36).slice(2, 6),
+      employeeId: emp.id,
+      name: emp.name,
+      amount: amt,
+      cash: Number(newSalesCash) || 0,
+      card: Number(newSalesCard) || 0,
+      memo: newSalesMemo.trim(),
+      submittedAt: new Date().toISOString(),
+    });
+    await sSet(KEY.sales(storeId, salesDate), list);
+    setSalesEntries(list);
+    setNewSalesEmpId("");
+    setNewSalesAmount("");
+    setNewSalesCash("");
+    setNewSalesCard("");
+    setNewSalesMemo("");
+    setSalesFormOpen(false);
+  };
+
+  const addStockEntry = async () => {
+    const name = newStockProductName.trim();
+    const q = Number(newStockQty);
+    const emp = employees.find((e) => e.id === newStockEmpId);
+    if (!emp || !name || !q || q <= 0) return;
+    const list = await sGet(KEY.stock(storeId, stockDate), []);
+    list.push({
+      id: "k" + Date.now() + Math.random().toString(36).slice(2, 6),
+      employeeId: emp.id,
+      name: emp.name,
+      productName: name,
+      qty: q,
+      unit: newStockUnit,
+      supplier: newStockSupplier.trim(),
+      memo: newStockMemo.trim(),
+      submittedAt: new Date().toISOString(),
+    });
+    await sSet(KEY.stock(storeId, stockDate), list);
+    setStockEntries(list);
+    setNewStockEmpId("");
+    setNewStockProductName("");
+    setNewStockQty("");
+    setNewStockUnit("개");
+    setNewStockSupplier("");
+    setNewStockMemo("");
+    setStockFormOpen(false);
   };
 
   const removeSalesEntry = async (date, id) => {
@@ -1803,6 +1871,87 @@ function AdminDashboard({ storeId, storeName, employees, setEmployees, onBack })
             </div>
           </div>
 
+          <button
+            onClick={() => setSalesFormOpen((v) => !v)}
+            className="w-full flex items-center justify-center gap-1.5 border border-dashed border-[#2E3650] rounded-xl py-2.5 text-xs font-bold text-[#8B93A7] hover:border-[#F5A623] hover:text-[#F5A623] transition-colors mb-4"
+          >
+            <Plus size={14} /> {salesFormOpen ? "입력 취소" : "매출 직접 입력"}
+          </button>
+
+          {salesFormOpen && (
+            <div className="bg-[#1c2333] border border-[#2E3650] rounded-2xl p-5 mb-4">
+              <label className="block text-xs font-bold text-[#8B93A7] mb-1.5">직원</label>
+              <select
+                value={newSalesEmpId}
+                onChange={(e) => setNewSalesEmpId(e.target.value)}
+                className="w-full bg-[#12151f] border border-[#2E3650] rounded-xl px-3 py-3 text-sm outline-none focus:border-[#F5A623] mb-3"
+              >
+                <option value="">선택해주세요</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </select>
+
+              <label className="block text-xs font-bold text-[#8B93A7] mb-1.5">총 매출액</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={newSalesAmount}
+                onChange={(e) => setNewSalesAmount(e.target.value)}
+                placeholder="0"
+                className="w-full bg-[#12151f] border border-[#2E3650] rounded-xl px-4 py-3 text-lg font-bold tabular-nums outline-none focus:border-[#F5A623] mb-3"
+              />
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="flex items-center gap-1 text-xs font-bold text-[#8B93A7] mb-1.5">
+                    <Banknote size={12} /> 현금
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={newSalesCash}
+                    onChange={(e) => setNewSalesCash(e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-[#12151f] border border-[#2E3650] rounded-xl px-3 py-2.5 text-sm tabular-nums outline-none focus:border-[#F5A623]"
+                  />
+                </div>
+                <div>
+                  <label className="flex items-center gap-1 text-xs font-bold text-[#8B93A7] mb-1.5">
+                    <CreditCard size={12} /> 카드
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={newSalesCard}
+                    onChange={(e) => setNewSalesCard(e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-[#12151f] border border-[#2E3650] rounded-xl px-3 py-2.5 text-sm tabular-nums outline-none focus:border-[#F5A623]"
+                  />
+                </div>
+              </div>
+
+              <label className="block text-xs font-bold text-[#8B93A7] mb-1.5">메모 (선택)</label>
+              <textarea
+                value={newSalesMemo}
+                onChange={(e) => setNewSalesMemo(e.target.value)}
+                placeholder="특이사항을 적어주세요"
+                rows={2}
+                className="w-full bg-[#12151f] border border-[#2E3650] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#F5A623] resize-none mb-4"
+              />
+
+              <button
+                disabled={!newSalesEmpId || !newSalesAmount}
+                onClick={addSalesEntry}
+                className="w-full bg-[#F5A623] text-[#12151f] font-extrabold rounded-xl py-3 active:scale-[0.98] transition-transform disabled:opacity-40"
+              >
+                매출 저장하기
+              </button>
+            </div>
+          )}
+
           <div className="space-y-2">
             {salesEntries.map((e, i) => (
               <div key={e.id || i} className="bg-[#1c2333] border border-[#2E3650] rounded-xl px-4 py-3.5">
@@ -1860,6 +2009,97 @@ function AdminDashboard({ storeId, storeName, employees, setEmployees, onBack })
             <div className="text-3xl font-extrabold tabular-nums text-[#F5A623]">{stockEntries.length}건</div>
             <div className="text-xs text-[#8B93A7] mt-2">총 수량 {stockTotalQty}개 상당</div>
           </div>
+
+          <button
+            onClick={() => setStockFormOpen((v) => !v)}
+            className="w-full flex items-center justify-center gap-1.5 border border-dashed border-[#2E3650] rounded-xl py-2.5 text-xs font-bold text-[#8B93A7] hover:border-[#F5A623] hover:text-[#F5A623] transition-colors mb-4"
+          >
+            <Plus size={14} /> {stockFormOpen ? "입력 취소" : "입고 직접 입력"}
+          </button>
+
+          {stockFormOpen && (
+            <div className="bg-[#1c2333] border border-[#2E3650] rounded-2xl p-5 mb-4">
+              <label className="block text-xs font-bold text-[#8B93A7] mb-1.5">직원</label>
+              <select
+                value={newStockEmpId}
+                onChange={(e) => setNewStockEmpId(e.target.value)}
+                className="w-full bg-[#12151f] border border-[#2E3650] rounded-xl px-3 py-3 text-sm outline-none focus:border-[#F5A623] mb-3"
+              >
+                <option value="">선택해주세요</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </select>
+
+              <label className="block text-xs font-bold text-[#8B93A7] mb-1.5">상품명</label>
+              <input
+                value={newStockProductName}
+                onChange={(e) => setNewStockProductName(e.target.value)}
+                placeholder="예) 삼각김밥 참치마요"
+                className="w-full bg-[#12151f] border border-[#2E3650] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#F5A623] mb-3"
+              />
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="block text-xs font-bold text-[#8B93A7] mb-1.5">수량</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={newStockQty}
+                    onChange={(e) => setNewStockQty(e.target.value)}
+                    placeholder="0"
+                    className="w-full bg-[#12151f] border border-[#2E3650] rounded-xl px-3 py-3 text-sm tabular-nums outline-none focus:border-[#F5A623]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#8B93A7] mb-1.5">단위</label>
+                  <div className="flex gap-1.5">
+                    {["개", "박스", "kg", "세트"].map((u) => (
+                      <button
+                        key={u}
+                        type="button"
+                        onClick={() => setNewStockUnit(u)}
+                        className={`flex-1 py-3 rounded-lg text-xs font-bold transition-colors ${
+                          newStockUnit === u ? "bg-[#F5A623] text-[#12151f]" : "bg-[#12151f] text-[#8B93A7] border border-[#2E3650]"
+                        }`}
+                      >
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-1 text-xs font-bold text-[#8B93A7] mb-1.5">
+                <Truck size={12} /> 공급처 (선택)
+              </label>
+              <input
+                value={newStockSupplier}
+                onChange={(e) => setNewStockSupplier(e.target.value)}
+                placeholder="예) OO물류"
+                className="w-full bg-[#12151f] border border-[#2E3650] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#F5A623] mb-3"
+              />
+
+              <label className="block text-xs font-bold text-[#8B93A7] mb-1.5">메모 (선택)</label>
+              <textarea
+                value={newStockMemo}
+                onChange={(e) => setNewStockMemo(e.target.value)}
+                placeholder="파손, 수량 불일치 등 특이사항"
+                rows={2}
+                className="w-full bg-[#12151f] border border-[#2E3650] rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#F5A623] resize-none mb-4"
+              />
+
+              <button
+                disabled={!newStockEmpId || !newStockProductName || !newStockQty}
+                onClick={addStockEntry}
+                className="w-full bg-[#F5A623] text-[#12151f] font-extrabold rounded-xl py-3 active:scale-[0.98] transition-transform disabled:opacity-40"
+              >
+                입고 등록하기
+              </button>
+            </div>
+          )}
 
           <div className="space-y-2">
             {stockEntries.map((r, i) => (
