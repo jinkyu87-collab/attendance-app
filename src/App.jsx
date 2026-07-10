@@ -10,6 +10,7 @@ import logoImg from "./assets/logo.png";
 
 // ---------- storage keys (scoped per store) ----------
 const KEY = {
+  brands: "brands",
   stores: "stores",
   masterPin: "master-pin",
   employees: (s) => `employees:${s}`,
@@ -106,8 +107,11 @@ function downloadCSV(filename, content) {
 
 // ---------- shell ----------
 export default function App() {
-  // store-select | store-manage | role-select | emp-pick | emp-home | emp-clock | emp-sales | emp-stock | admin-login | admin-dash
-  const [view, setView] = useState("store-select");
+  // brand-select | store-select | store-manage | role-select | emp-pick | emp-home | emp-clock | emp-sales | emp-stock | admin-login | admin-dash
+  const [view, setView] = useState("brand-select");
+  const [brands, setBrands] = useState(null);
+  const [brandId, setBrandId] = useState(null);
+  const [brandName, setBrandName] = useState("");
   const [stores, setStores] = useState(null);
   const [storeId, setStoreId] = useState(null);
   const [storeName, setStoreName] = useState("");
@@ -118,14 +122,42 @@ export default function App() {
   useEffect(() => {
     (async () => {
       let st = await sGet(KEY.stores, null);
-      if (!st) {
-        st = [{ id: "st1", name: "제주점" }];
-        await sSet(KEY.stores, st);
+      if (!st) st = [];
+      let br = await sGet(KEY.brands, null);
+      if (!br) {
+        if (st.length > 0 && st.some((s) => !s.brandId)) {
+          // migrate stores created before brands existed into one default brand
+          const defaultBrand = { id: "b" + Date.now(), name: "미분류 브랜드" };
+          br = [defaultBrand];
+          st = st.map((s) => (s.brandId ? s : { ...s, brandId: defaultBrand.id }));
+          await sSet(KEY.stores, st);
+        } else if (st.length === 0) {
+          const defaultBrand = { id: "b" + Date.now(), name: "브랜드1" };
+          br = [defaultBrand];
+          st = [{ id: "st1", name: "제주점", brandId: defaultBrand.id }];
+          await sSet(KEY.stores, st);
+        } else {
+          br = [];
+        }
+        await sSet(KEY.brands, br);
       }
+      setBrands(br);
       setStores(st);
       setLoading(false);
     })();
   }, []);
+
+  const enterBrand = (brand) => {
+    setBrandId(brand.id);
+    setBrandName(brand.name);
+    setView("store-select");
+  };
+
+  const exitBrand = () => {
+    setBrandId(null);
+    setBrandName("");
+    setView("brand-select");
+  };
 
   const enterStore = async (store) => {
     setStoreId(store.id);
@@ -160,12 +192,27 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#12151f] font-sans text-[#F5F6FA] flex justify-center">
       <div className="w-full max-w-sm min-h-screen bg-[#12151f] relative flex flex-col">
+        {view === "brand-select" && (
+          <BrandSelect brands={brands} onSelect={enterBrand} onManage={() => setView("store-manage")} />
+        )}
+
         {view === "store-select" && (
-          <StoreSelect stores={stores} onSelect={enterStore} onManage={() => setView("store-manage")} />
+          <StoreSelect
+            brandName={brandName}
+            stores={stores.filter((s) => s.brandId === brandId)}
+            onSelect={enterStore}
+            onBack={exitBrand}
+          />
         )}
 
         {view === "store-manage" && (
-          <StoreManage stores={stores} setStores={setStores} onBack={() => setView("store-select")} />
+          <StoreManage
+            brands={brands}
+            setBrands={setBrands}
+            stores={stores}
+            setStores={setStores}
+            onBack={() => setView("brand-select")}
+          />
         )}
 
         {view === "role-select" && (
@@ -252,14 +299,50 @@ export default function App() {
   );
 }
 
-// ---------- store select ----------
-function StoreSelect({ stores, onSelect, onManage }) {
+// ---------- brand select ----------
+function BrandSelect({ brands, onSelect, onManage }) {
   return (
     <div className="flex-1 flex flex-col justify-center px-7 py-10">
       <div className="mb-12">
         <div className="inline-block bg-white rounded-xl px-4 py-2.5 mb-6">
           <img src={LOGO_SRC} alt="회사 로고" className="h-9" />
         </div>
+        <h1 className="text-3xl font-extrabold leading-tight">브랜드 선택</h1>
+        <p className="text-[#8B93A7] text-sm mt-3">운영하실 브랜드를 선택해주세요</p>
+      </div>
+
+      <div className="space-y-2.5">
+        {brands.map((b) => (
+          <button
+            key={b.id}
+            onClick={() => onSelect(b)}
+            className="w-full flex items-center gap-4 bg-[#1c2333] border border-[#2E3650] rounded-2xl px-5 py-5 text-left hover:border-[#F5A623] transition-colors"
+          >
+            <div className="w-11 h-11 rounded-xl bg-[#232b40] flex items-center justify-center shrink-0">
+              <Users size={20} className="text-[#F5A623]" />
+            </div>
+            <div className="font-bold">{b.name}</div>
+          </button>
+        ))}
+        {brands.length === 0 && <div className="text-center text-[#4A5170] text-sm py-10">등록된 브랜드가 없습니다</div>}
+      </div>
+
+      <button onClick={onManage} className="mt-10 text-center text-[#4A5170] text-xs underline underline-offset-2">
+        브랜드/매장 관리 (본사)
+      </button>
+    </div>
+  );
+}
+
+// ---------- store select (within a brand) ----------
+function StoreSelect({ brandName, stores, onSelect, onBack }) {
+  return (
+    <div className="flex-1 flex flex-col justify-center px-7 py-10">
+      <button onClick={onBack} className="absolute top-6 left-5 w-9 h-9 flex items-center justify-center text-[#8B93A7] hover:text-white">
+        <ChevronLeft size={22} />
+      </button>
+      <div className="mb-12">
+        <div className="text-[11px] tracking-[0.25em] text-[#F5A623] font-bold mb-2">{brandName}</div>
         <h1 className="text-3xl font-extrabold leading-tight">매장 선택</h1>
         <p className="text-[#8B93A7] text-sm mt-3">근무하실 매장을 선택해주세요</p>
       </div>
@@ -279,21 +362,19 @@ function StoreSelect({ stores, onSelect, onManage }) {
         ))}
         {stores.length === 0 && <div className="text-center text-[#4A5170] text-sm py-10">등록된 매장이 없습니다</div>}
       </div>
-
-      <button onClick={onManage} className="mt-10 text-center text-[#4A5170] text-xs underline underline-offset-2">
-        매장 관리 (본사)
-      </button>
     </div>
   );
 }
 
 // ---------- store manage (master-pin gated) ----------
-function StoreManage({ stores, setStores, onBack }) {
+function StoreManage({ brands, setBrands, stores, setStores, onBack }) {
   const [authed, setAuthed] = useState(false);
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [newBrandName, setNewBrandName] = useState("");
+  const [newStoreName, setNewStoreName] = useState("");
+  const [newStoreBrandId, setNewStoreBrandId] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null); // { kind: "brand" | "store", id, name }
   const [curPin, setCurPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [newPin2, setNewPin2] = useState("");
@@ -309,13 +390,33 @@ function StoreManage({ stores, setStores, onBack }) {
     }
   };
 
-  const addStore = async () => {
-    const name = newName.trim();
+  const addBrand = async () => {
+    const name = newBrandName.trim();
     if (!name) return;
-    const list = [...stores, { id: "st" + Date.now(), name }];
+    const list = [...brands, { id: "b" + Date.now(), name }];
+    setBrands(list);
+    await sSet(KEY.brands, list);
+    setNewBrandName("");
+  };
+
+  const removeBrand = async (id) => {
+    const brandList = brands.filter((b) => b.id !== id);
+    setBrands(brandList);
+    await sSet(KEY.brands, brandList);
+    // stores under a removed brand would otherwise become unreachable, so drop them from the list too
+    // (their underlying employee/attendance/sales data is left untouched, same as removing a single store)
+    const storeList = stores.filter((s) => s.brandId !== id);
+    setStores(storeList);
+    await sSet(KEY.stores, storeList);
+  };
+
+  const addStore = async () => {
+    const name = newStoreName.trim();
+    if (!name || !newStoreBrandId) return;
+    const list = [...stores, { id: "st" + Date.now(), name, brandId: newStoreBrandId }];
     setStores(list);
     await sSet(KEY.stores, list);
-    setNewName("");
+    setNewStoreName("");
   };
 
   const removeStore = async (id) => {
@@ -326,7 +427,8 @@ function StoreManage({ stores, setStores, onBack }) {
 
   const confirmRemove = async () => {
     if (!deleteTarget) return;
-    await removeStore(deleteTarget.id);
+    if (deleteTarget.kind === "brand") await removeBrand(deleteTarget.id);
+    else await removeStore(deleteTarget.id);
     setDeleteTarget(null);
   };
 
@@ -356,7 +458,7 @@ function StoreManage({ stores, setStores, onBack }) {
   if (!authed) {
     return (
       <div className="flex-1 flex flex-col">
-        <TopBar title="매장 관리" onBack={onBack} />
+        <TopBar title="브랜드/매장 관리" onBack={onBack} />
         <div className="flex-1 flex flex-col justify-center px-7 -mt-16">
           <div className="text-center mb-8">
             <div className="w-14 h-14 rounded-2xl bg-[#232b40] flex items-center justify-center mx-auto mb-4">
@@ -389,15 +491,63 @@ function StoreManage({ stores, setStores, onBack }) {
 
   return (
     <div className="flex-1 flex flex-col">
-      <TopBar title="매장 관리" onBack={onBack} />
+      <TopBar title="브랜드/매장 관리" onBack={onBack} />
       <div className="px-5 pb-8">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="w-9 h-9 rounded-lg bg-[#232b40] flex items-center justify-center shrink-0">
+            <Users size={16} className="text-[#F5A623]" />
+          </div>
+          <div className="font-bold text-sm">브랜드</div>
+        </div>
         <div className="flex items-center gap-2 mb-4">
+          <input
+            value={newBrandName}
+            onChange={(e) => setNewBrandName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addBrand()}
+            placeholder="새 브랜드 이름"
+            className="flex-1 bg-[#1c2333] border border-[#2E3650] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#F5A623]"
+          />
+          <button onClick={addBrand} className="w-9 h-9 rounded-lg bg-[#F5A623] text-[#12151f] flex items-center justify-center shrink-0">
+            <Plus size={18} />
+          </button>
+        </div>
+        <div className="space-y-2 mb-8">
+          {brands.map((b) => (
+            <div key={b.id} className="flex items-center justify-between bg-[#1c2333] border border-[#2E3650] rounded-xl px-4 py-3">
+              <span className="font-semibold text-sm">{b.name}</span>
+              <button
+                onClick={() => setDeleteTarget({ kind: "brand", id: b.id, name: b.name })}
+                className="text-[#4A5170] hover:text-[#E5484D] p-1"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+          {brands.length === 0 && <div className="text-center text-[#4A5170] text-sm py-8">등록된 브랜드가 없습니다</div>}
+        </div>
+
+        <div className="flex items-center gap-2 mb-2">
           <div className="w-9 h-9 rounded-lg bg-[#232b40] flex items-center justify-center shrink-0">
             <Store size={16} className="text-[#F5A623]" />
           </div>
+          <div className="font-bold text-sm">매장</div>
+        </div>
+        <div className="flex items-center gap-2 mb-2">
+          <select
+            value={newStoreBrandId}
+            onChange={(e) => setNewStoreBrandId(e.target.value)}
+            className="bg-[#1c2333] border border-[#2E3650] rounded-lg px-2 py-2.5 text-sm outline-none focus:border-[#F5A623]"
+          >
+            <option value="">브랜드 선택</option>
+            {brands.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
           <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
+            value={newStoreName}
+            onChange={(e) => setNewStoreName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addStore()}
             placeholder="새 매장 이름"
             className="flex-1 bg-[#1c2333] border border-[#2E3650] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#F5A623]"
@@ -406,11 +556,20 @@ function StoreManage({ stores, setStores, onBack }) {
             <Plus size={18} />
           </button>
         </div>
+        {brands.length === 0 && <div className="text-[11px] text-[#4A5170] mb-4">매장을 등록하려면 먼저 브랜드를 추가해주세요</div>}
         <div className="space-y-2">
           {stores.map((s) => (
             <div key={s.id} className="flex items-center justify-between bg-[#1c2333] border border-[#2E3650] rounded-xl px-4 py-3">
-              <span className="font-semibold text-sm">{s.name}</span>
-              <button onClick={() => setDeleteTarget(s)} className="text-[#4A5170] hover:text-[#E5484D] p-1">
+              <div>
+                <span className="font-semibold text-sm">{s.name}</span>
+                <div className="text-[11px] text-[#4A5170] mt-0.5">
+                  {brands.find((b) => b.id === s.brandId)?.name || "미분류"}
+                </div>
+              </div>
+              <button
+                onClick={() => setDeleteTarget({ kind: "store", id: s.id, name: s.name })}
+                className="text-[#4A5170] hover:text-[#E5484D] p-1"
+              >
                 <Trash2 size={16} />
               </button>
             </div>
@@ -479,8 +638,10 @@ function StoreManage({ stores, setStores, onBack }) {
             </div>
             <div className="font-bold text-base mb-1.5">정말 삭제하시겠습니까?</div>
             <div className="text-[#8B93A7] text-sm mb-6">
-              <span className="text-[#F5F6FA] font-semibold">{deleteTarget.name}</span> 매장을 삭제하면 이 목록에서 사라지지만, 기존
-              데이터는 남아있어요.
+              <span className="text-[#F5F6FA] font-semibold">{deleteTarget.name}</span>
+              {deleteTarget.kind === "brand"
+                ? " 브랜드를 삭제하면 소속된 매장도 목록에서 함께 사라지지만, 기존 데이터는 남아있어요."
+                : " 매장을 삭제하면 이 목록에서 사라지지만, 기존 데이터는 남아있어요."}
             </div>
             <div className="flex gap-2">
               <button
