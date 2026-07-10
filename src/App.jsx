@@ -257,7 +257,9 @@ function StoreSelect({ stores, onSelect, onManage }) {
   return (
     <div className="flex-1 flex flex-col justify-center px-7 py-10">
       <div className="mb-12">
-        <img src={LOGO_SRC} alt="회사 로고" className="h-9 mb-6" />
+        <div className="inline-block bg-white rounded-xl px-4 py-2.5 mb-6">
+          <img src={LOGO_SRC} alt="회사 로고" className="h-9" />
+        </div>
         <h1 className="text-3xl font-extrabold leading-tight">매장 선택</h1>
         <p className="text-[#8B93A7] text-sm mt-3">근무하실 매장을 선택해주세요</p>
       </div>
@@ -509,7 +511,9 @@ function RoleSelect({ storeName, onPick, onBack }) {
         <ChevronLeft size={22} />
       </button>
       <div className="mb-14">
-        <img src={LOGO_SRC} alt="회사 로고" className="h-7 mb-5" />
+        <div className="inline-block bg-white rounded-xl px-3.5 py-2 mb-5">
+          <img src={LOGO_SRC} alt="회사 로고" className="h-7" />
+        </div>
         <div className="text-[11px] tracking-[0.25em] text-[#F5A623] font-bold mb-2">{storeName}</div>
         <h1 className="text-3xl font-extrabold leading-tight">
           매장 근무
