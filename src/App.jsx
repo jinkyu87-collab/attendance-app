@@ -60,6 +60,15 @@ function shortTime(iso) {
   const d = new Date(iso);
   return d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
+function isoToTimeInput(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+function timeToISO(dateStr, hhmm) {
+  if (!hhmm) return null;
+  return new Date(`${dateStr}T${hhmm}:00`).toISOString();
+}
 function weekdayLabel(dateStr) {
   const days = ["일", "월", "화", "수", "목", "금", "토"];
   return days[new Date(dateStr + "T00:00:00").getDay()];
@@ -1557,7 +1566,11 @@ function AdminBoardTab({
 // ---------- admin dashboard ----------
 function AdminDashboard({ storeId, storeName, employees, setEmployees, onBack }) {
   const [tab, setTab] = useState("today"); // today | sales | stock | events | notices | directives | safety | incidents | staff | backup
+  const [attDate, setAttDate] = useState(todayStr());
   const [today, setToday] = useState([]);
+  const [editEmpId, setEditEmpId] = useState(null);
+  const [editCheckIn, setEditCheckIn] = useState("");
+  const [editCheckOut, setEditCheckOut] = useState("");
   const [newName, setNewName] = useState("");
   const [curPin, setCurPin] = useState("");
   const [newPin, setNewPin] = useState("");
@@ -1608,10 +1621,51 @@ function AdminDashboard({ storeId, storeName, employees, setEmployees, onBack })
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupDays, setBackupDays] = useState(30);
 
-  const loadToday = useCallback(async () => {
-    const list = await sGet(KEY.attendance(storeId, todayStr()), []);
+  const loadToday = useCallback(
+    async (date) => {
+      const list = await sGet(KEY.attendance(storeId, date), []);
+      setToday(list);
+    },
+    [storeId]
+  );
+
+  const startEditAttendance = (emp, rec) => {
+    setEditEmpId(emp.id);
+    setEditCheckIn(isoToTimeInput(rec?.checkIn));
+    setEditCheckOut(isoToTimeInput(rec?.checkOut));
+  };
+
+  const cancelEditAttendance = () => {
+    setEditEmpId(null);
+    setEditCheckIn("");
+    setEditCheckOut("");
+  };
+
+  const saveAttendance = async (emp) => {
+    const list = await sGet(KEY.attendance(storeId, attDate), []);
+    const idx = list.findIndex((r) => r.employeeId === emp.id);
+    if (!editCheckIn && !editCheckOut) {
+      // both cleared: treat as "미출근" and drop the record entirely
+      if (idx !== -1) {
+        list.splice(idx, 1);
+        await sSet(KEY.attendance(storeId, attDate), list);
+        setToday(list);
+      }
+      cancelEditAttendance();
+      return;
+    }
+    const rec = {
+      employeeId: emp.id,
+      name: emp.name,
+      checkIn: timeToISO(attDate, editCheckIn),
+      checkOut: timeToISO(attDate, editCheckOut),
+    };
+    if (idx === -1) list.push(rec);
+    else list[idx] = rec;
+    await sSet(KEY.attendance(storeId, attDate), list);
     setToday(list);
-  }, [storeId]);
+    cancelEditAttendance();
+  };
 
   const loadSales = useCallback(
     async (date) => {
@@ -1648,8 +1702,8 @@ function AdminDashboard({ storeId, storeName, employees, setEmployees, onBack })
   }, [storeId]);
 
   useEffect(() => {
-    loadToday();
-  }, [loadToday]);
+    loadToday(attDate);
+  }, [attDate, loadToday]);
   useEffect(() => {
     loadSales(salesDate);
   }, [salesDate, loadSales]);
@@ -1934,6 +1988,7 @@ function AdminDashboard({ storeId, storeName, employees, setEmployees, onBack })
 
   const workingCount = today.filter((r) => r.checkIn && !r.checkOut).length;
   const doneCount = today.filter((r) => r.checkOut).length;
+  const isAttToday = attDate === todayStr();
   const salesTotal = salesEntries.reduce((s, e) => s + e.amount, 0);
   const salesCash = salesEntries.reduce((s, e) => s + (e.cash || 0), 0);
   const salesCard = salesEntries.reduce((s, e) => s + (e.card || 0), 0);
@@ -1974,6 +2029,23 @@ function AdminDashboard({ storeId, storeName, employees, setEmployees, onBack })
 
       {tab === "today" && (
         <div className="px-5 pb-8">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => setAttDate(addDays(attDate, -1))}
+              className="w-8 h-8 flex items-center justify-center text-[#8B93A7] hover:text-white"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <div className="text-sm font-bold">{fmtDateLabel(attDate)}</div>
+            <button
+              onClick={() => !isAttToday && setAttDate(addDays(attDate, 1))}
+              disabled={isAttToday}
+              className="w-8 h-8 flex items-center justify-center text-[#8B93A7] hover:text-white disabled:opacity-30"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+
           <div className="grid grid-cols-3 gap-2 mb-5">
             <StatBox label="전체" value={employees.length} />
             <StatBox label="근무중" value={workingCount} color="text-[#F5A623]" />
@@ -1984,15 +2056,69 @@ function AdminDashboard({ storeId, storeName, employees, setEmployees, onBack })
               const rec = today.find((r) => r.employeeId === e.id);
               const st = !rec ? "미출근" : !rec.checkOut ? "근무중" : "퇴근";
               const stColor = !rec ? "text-[#4A5170]" : !rec.checkOut ? "text-[#F5A623]" : "text-[#2F9E44]";
+              const editing = editEmpId === e.id;
               return (
-                <div key={e.id} className="flex items-center justify-between bg-[#1c2333] border border-[#2E3650] rounded-xl px-4 py-3.5">
-                  <div>
-                    <div className="font-semibold text-sm">{e.name}</div>
-                    <div className="text-[11px] text-[#4A5170] mt-0.5 tabular-nums">
-                      {shortTime(rec?.checkIn)} → {shortTime(rec?.checkOut)}
+                <div key={e.id} className="bg-[#1c2333] border border-[#2E3650] rounded-xl px-4 py-3.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-sm">{e.name}</div>
+                      {!editing && (
+                        <div className="text-[11px] text-[#4A5170] mt-0.5 tabular-nums">
+                          {shortTime(rec?.checkIn)} → {shortTime(rec?.checkOut)}
+                        </div>
+                      )}
                     </div>
+                    {!editing && (
+                      <div className="flex items-center gap-3">
+                        <div className={`text-xs font-bold ${stColor}`}>{st}</div>
+                        <button
+                          onClick={() => startEditAttendance(e, rec)}
+                          className="text-[11px] font-bold text-[#8B93A7] hover:text-[#F5A623] underline underline-offset-2"
+                        >
+                          수정
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className={`text-xs font-bold ${stColor}`}>{st}</div>
+
+                  {editing && (
+                    <div className="mt-3 pt-3 border-t border-[#2E3650]">
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-[#8B93A7] mb-1">출근</label>
+                          <input
+                            type="time"
+                            value={editCheckIn}
+                            onChange={(ev) => setEditCheckIn(ev.target.value)}
+                            className="w-full bg-[#12151f] border border-[#2E3650] rounded-lg px-2.5 py-2 text-sm tabular-nums outline-none focus:border-[#F5A623]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-[#8B93A7] mb-1">퇴근</label>
+                          <input
+                            type="time"
+                            value={editCheckOut}
+                            onChange={(ev) => setEditCheckOut(ev.target.value)}
+                            className="w-full bg-[#12151f] border border-[#2E3650] rounded-lg px-2.5 py-2 text-sm tabular-nums outline-none focus:border-[#F5A623]"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={cancelEditAttendance}
+                          className="flex-1 py-2.5 rounded-lg bg-[#232b40] text-[#F5F6FA] font-bold text-xs active:scale-[0.98] transition-transform"
+                        >
+                          취소
+                        </button>
+                        <button
+                          onClick={() => saveAttendance(e)}
+                          className="flex-1 py-2.5 rounded-lg bg-[#F5A623] text-[#12151f] font-bold text-xs active:scale-[0.98] transition-transform"
+                        >
+                          저장
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
